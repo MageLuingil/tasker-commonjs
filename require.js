@@ -43,14 +43,11 @@ var require = (function() {
 	 */
 	var dirname = function(filepath) {
 		if (!filepath) return '.';
-		
 		// Remove all trailing segments until a non-empty segment is removed
 		var segments = filepath.split('/');
 		while (segments.length && !segments.pop());
-		
 		// If no segments remain, return / for absolute paths and . for relative
-		var dirname = segments.join('/');
-		return dirname || ((filepath[0] == '/') ? '/' : '.');
+		return segments.join('/') || ((filepath[0] == '/') ? '/' : '.');
 	};
 	
 	/**
@@ -75,18 +72,18 @@ var require = (function() {
 	 * Resolve . and .. segments and remove repeated path separators
 	 */
 	var normalizePath = function(filepath) {
-		var segments = filepath.split('/');
-		// Parse right-to-left to allow splicing
-		for (let i=segments.length-1, up=0; i; i--) {
-			let segment = segments[i];
-			if (segment == '.' || (segment == '' && i)) {
-				segments.splice(i, 1);
-			} else if (segment == '..') {
-				segments.splice(i, 1);
-				up++;
-			} else if (up && i && segment.length) {
-				segments.splice(i, 1);
-				up--;
+		var segments = [];
+		for (let cur of filepath.split('/')) {
+			let last = segments[segments.length - 1];
+			// For .. remove the last segment (if non-empty) unless it's also ..
+			if (cur == '..' && last && last != '..') {
+				segments.pop();
+			}
+			// Append empty value only if it's the first segment (for root)
+			// Append .. only if it's the first segment or preceded by ..
+			// Never append .
+			if ((cur || last === undefined) && cur != '.' && (cur != '..' || last === undefined || last == '..')) {
+				segments.push(cur);
 			}
 		}
 		// Retain trailing slash
