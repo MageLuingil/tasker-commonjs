@@ -11,14 +11,15 @@
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
  */
-var require = (function() {
-	var module_cache = {};
+var require;
+{
+	let module_cache = {};
 	
 	/*****************
 	 * Module object *
 	 *****************/
 	
-	var Module = function(id) {
+	let Module = function(id) {
 		Object.defineProperty(this, 'id', { value: id });
 		this.exports = {};
 	};
@@ -30,10 +31,10 @@ var require = (function() {
 	/**
 	 * Return the last segment of a path
 	 */
-	var basename = function(filepath) {
-		var segments = filepath.split('/');
+	let basename = function(filepath) {
+		let name, segments = filepath.split('/');
 		do {
-			var name = segments.pop();
+			name = segments.pop();
 		} while (!name && segments.length);
 		return name;
 	};
@@ -41,10 +42,10 @@ var require = (function() {
 	/**
 	 * Return the parent directory of a path
 	 */
-	var dirname = function(filepath) {
+	let dirname = function(filepath) {
 		if (!filepath) return '.';
 		// Remove all trailing segments until a non-empty segment is removed
-		var segments = filepath.split('/');
+		let segments = filepath.split('/');
 		while (segments.length && !segments.pop());
 		// If no segments remain, return / for absolute paths and . for relative
 		return segments.join('/') || ((filepath[0] == '/') ? '/' : '.');
@@ -53,26 +54,28 @@ var require = (function() {
 	/**
 	 * Return the file extension for a path
 	 */
-	var extname = function(filepath) {
-		var matches = basename(filepath).match(/^.+(\.[^.]+)$/);
+	let extname = function(filepath) {
+		let matches = basename(filepath).match(/^.+(\.[^.]+)$/);
 		return matches ? matches[1] : '';
 	};
 	
 	/**
 	 * Join path segments together
 	 */
-	var joinPath = function(...paths) {
-		return paths.reduce(function(path, seg) {
+	let joinPath = function(...paths) {
+		// Filter out any empty arguments
+		paths = paths.filter((s) => s.length);
+		return paths.length ? paths.reduce(
 			// Ensure trailing slash on path, remove leading slash on segment
-			return path.replace(/\/?$/, '/') + seg.replace(/^\//, '');
-		});
+			(path, seg) => path.replace(/\/?$/, '/') + seg.replace(/^\//, '')
+		) : '';
 	};
 	
 	/**
 	 * Resolve . and .. segments and remove repeated path separators
 	 */
-	var normalizePath = function(filepath) {
-		var segments = [];
+	let normalizePath = function(filepath) {
+		let segments = [];
 		for (let cur of filepath.split('/')) {
 			let last = segments[segments.length - 1];
 			// For .. remove the last segment (if non-empty) unless it's also ..
@@ -105,9 +108,9 @@ var require = (function() {
 	 * @param {String} directory  Directory from which the module is being requested
 	 * @return {String}
 	 */
-	var resolveFile = function(module_id, directory) {
+	let resolveFile = function(module_id, directory) {
 		// For most module identifiers, search within predefined paths
-		var paths = require.paths;
+		let paths = require.paths;
 		if (module_id[0] == '/') {
 			// Absolute identifier, don't search within any paths
 			paths = [ '' ];
@@ -117,27 +120,25 @@ var require = (function() {
 		}
 		
 		for (let path of paths) {
-			var filepath = normalizePath(joinPath(path, module_id));
-			var filetype = stat(filepath);
+			let filepath = normalizePath(joinPath(path, module_id));
+			let filetype = stat(filepath);
 			
 			if (filetype == 'regular file') {
 				return filepath;
 			} else if (filetype == 'directory') {
 				// Try loading as a node.js module
 				try {
-					var pkg = JSON.parse(readFile(joinPath(filepath, 'package.json')));
-				} catch (e) {}
-				if (pkg && pkg.main) {
-					var mainpath = joinPath(filepath, pkg.main);
-					for (let ext of ['', '.js', '.json']) {
-						if (stat(mainpath + ext)) return mainpath + ext;
+					let pkg = JSON.parse(readFile(joinPath(filepath, 'package.json')));
+					if (pkg.main) {
+						let mainpath = joinPath(filepath, pkg.main);
+						for (let ext of ['', '.js', '.json']) {
+							if (stat(mainpath + ext)) return mainpath + ext;
+						}
 					}
-				}
+				} catch (e) {}
 				// If loading main from package.json failed, try index.js
-				var indexpath = joinPath(filepath, 'index.js');
-				if (stat(indexpath)) {
-					return indexpath;
-				}
+				let indexpath = joinPath(filepath, 'index.js');
+				if (stat(indexpath)) return indexpath;
 			} else if (filepath.slice(-1) != '/') {
 				// Maybe it's just missing an extension
 				for (let ext of ['.js', '.json']) {
@@ -155,7 +156,7 @@ var require = (function() {
 	 * @param {String} filepath  The file path to check
 	 * @return {String}
 	 */
-	var stat = function(filepath) {
+	let stat = function(filepath) {
 		// Quote path for safe shell usage
 		filepath = "'" + filepath.replace(/'/g, "'\\''") + "'";
 		// `stat` isn't always available in android, so use a POSIX safe test
@@ -175,11 +176,11 @@ var require = (function() {
 	/**
 	 * Initialize search paths
 	 */
-	var initPaths = function() {
+	let initPaths = function() {
 		const JS_PATH = global('JS_PATH');
 		
 		// Use a set to remove possible duplicates
-		var paths = new Set();
+		let paths = new Set();
 		for (let path of JS_PATH.split(':')) {
 			// Remove invalid paths now to save time later
 			if (!stat(path)) continue;
@@ -200,27 +201,27 @@ var require = (function() {
 	 * @param {String} module_id  Name or path for a module
 	 * @return {Object}
 	 */
-	var require = function(module_id) {
+	require = function(module_id) {
 		if (!require.paths) {
 			require.paths = initPaths();
 		}
 		
 		// If require was called from a module, save a reference to it
-		var parent = module || require.main;
+		let parent = (this instanceof Module) ? this : require.main;
 		
 		// Canonicalize module name
-		var filepath = resolveFile(module_id, dirname(parent.id));
+		let filepath = resolveFile(module_id, dirname(parent.id));
 		if (!filepath) {
 			throw new Error('Module not found');
 		}
 		
 		// Check for cached, or load new
-		var module = module_cache[filepath];
+		let module = module_cache[filepath];
 		if (!module) {
 			module = new Module(filepath);
 			module_cache[filepath] = module;
 			
-			var source = readFile(filepath);
+			let source = readFile(filepath);
 			if (!source) {
 				throw new Error('Unable to load ' + module_id);
 			}
@@ -229,15 +230,13 @@ var require = (function() {
 			if (extname(filepath) == '.json') {
 				module.exports = JSON.parse(source);
 			} else {
-				// Run in global scope
-				var fn = new Function('require', 'module', 'exports', source);
-				fn(require, module, module.exports);
+				// Run in module scope
+				let fn = new Function('require', 'module', 'exports', source);
+				fn.call(module, require, module, module.exports);
 			}
 		}
 		
 		return module.exports;
 	};
 	require.main = new Module();
-	
-	return require;
-})();
+}
