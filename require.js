@@ -249,5 +249,5 @@ var require;
 		
 		return module.exports;
 	};
-	require.main = new Module();
+	Object.defineProperty(require, 'main', { value: new Module() });
 }
