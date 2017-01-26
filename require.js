@@ -2,10 +2,8 @@
  * CommonJS and node.js module loader for Tasker
  *
  * Modules are loaded from the path(s) specified in the JS_PATH global variable.
- * JS_PATH does not support Tasker's relative file paths.
- *
- * Due to limitations in Tasker, this loader does not support relative paths in
- * the main script. Relative paths required from the main script will be loaded
+ * Due to limitations in Tasker, JS_PATH and the main script do not support
+ * relative paths. Relative paths required from the main script will be loaded
  * using JS_PATH. Relative paths required from modules should load normally.
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
@@ -14,6 +12,7 @@
 var require;
 {
 	let module_cache = {};
+	let resolve_cache = {};
 	
 	/*****************
 	 * Module object *
@@ -99,16 +98,33 @@ var require;
 	 ***********************/
 	
 	/**
+	 * Resolve a filepath without a file extension to an existing file
+	 *
+	 * @param {String} filepath The path to the file
+	 * @param {Boolean} check_wo_ext Whether to check for the file without
+	 *  appending an extension
+	 * @return {String|undefined}
+	 */
+	let resolveExtension = function(filepath, check_wo_ext) {
+		if (check_wo_ext && stat(filepath) == 'regular file') return filepath;
+		for (let ext of ['.js', '.json']) {
+			if (stat(filepath + ext) == 'regular file') return filepath + ext;
+		}
+	};
+	
+	/**
 	 * Given a module ID, resolve it to the fully qualified path to the file
 	 * that is the entry point to that module.
 	 *
-	 * @todo Cache results
-	 *
 	 * @param {String} module_id  Name or path for a module
-	 * @param {String} directory  Directory from which the module is being requested
-	 * @return {String}
+	 * @param {String} directory  Directory from which the module was requested
+	 * @return {String|false}
 	 */
 	let resolveFile = function(module_id, directory) {
+		// Cache results to prevent unnecessary filesystem calls
+		let cache = resolve_cache, key = JSON.stringify({id: module_id, dir: directory});
+		if (cache[key]) return cache[key];
+		
 		// For most module identifiers, search within predefined paths
 		let paths = require.paths;
 		if (module_id[0] == '/') {
@@ -124,26 +140,21 @@ var require;
 			let filetype = stat(filepath);
 			
 			if (filetype == 'regular file') {
-				return filepath;
+				return cache[key] = filepath;
 			} else if (filetype == 'directory') {
 				// Try loading as a node.js module
 				try {
 					let pkg = JSON.parse(readFile(joinPath(filepath, 'package.json')));
-					if (pkg.main) {
-						let mainpath = joinPath(filepath, pkg.main);
-						for (let ext of ['', '.js', '.json']) {
-							if (stat(mainpath + ext)) return mainpath + ext;
-						}
-					}
+					let main = pkg.main && resolveExtension(joinPath(filepath, pkg.main), true);
+					if (main) return cache[key] = main;
 				} catch (e) {}
 				// If loading main from package.json failed, try index.js
 				let indexpath = joinPath(filepath, 'index.js');
-				if (stat(indexpath)) return indexpath;
+				if (stat(indexpath)) return cache[key] = indexpath;
 			} else if (filepath.slice(-1) != '/') {
 				// Maybe it's just missing an extension
-				for (let ext of ['.js', '.json']) {
-					if (stat(filepath + ext)) return filepath + ext;
-				}
+				let file = resolveExtension(filepath);
+				if (file) return cache[key] = file;
 			}
 		}
 		
