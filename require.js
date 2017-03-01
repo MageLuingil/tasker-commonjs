@@ -1,10 +1,10 @@
 /**
  * CommonJS and node.js module loader for Tasker
  *
- * Modules are loaded from the path(s) specified in the JS_PATH global variable.
- * Due to limitations in Tasker, JS_PATH and the main script do not support
- * relative paths. Relative paths required from the main script will be loaded
- * using JS_PATH. Relative paths required from modules should load normally.
+ * Modules are loaded from the path(s) specified in the JS_PATH global variable,
+ * or from the dirname of the CommonJS global var, if JS_PATH is not defined.
+ * Due to limitations in Tasker, relative paths are not supported in JS_PATH or
+ * the main script. Relative paths required from modules should load normally.
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
@@ -151,8 +151,16 @@ var require;
 				// If loading main from package.json failed, try index.js
 				let indexpath = joinPath(filepath, 'index.js');
 				if (stat(indexpath)) return cache[key] = indexpath;
-			} else if (filepath.slice(-1) != '/') {
-				// Maybe it's just missing an extension
+			}
+			
+			// If it's not a path, check if it's a module in node_modules/
+			if (module_id.indexOf('/') == -1 && basename(path) != 'node_modules') {
+				let file = resolveFile(joinPath(path, 'node_modules', module_id, '/'));
+				if (file) return cache[key] = file;
+			}
+			
+			// Maybe it's just missing an extension
+			if (filepath.slice(-1) != '/') {
 				let file = resolveExtension(filepath);
 				if (file) return cache[key] = file;
 			}
@@ -188,20 +196,14 @@ var require;
 	 * Initialize search paths
 	 */
 	let initPaths = function() {
-		const JS_PATH = global('JS_PATH');
+		const PATH = global('JS_PATH') || dirname(global('CommonJS'));
 		
 		// Use a set to remove possible duplicates
 		let paths = new Set();
-		for (let path of JS_PATH.split(':')) {
+		for (let path of PATH.split(':').map(normalizePath)) {
 			// Remove invalid paths now to save time later
 			if (!stat(path)) continue;
 			paths.add(path);
-			
-			// Also search in any node_modules subdirectories
-			let subpath = joinPath(path, 'node_modules');
-			if (basename(path) != 'node_modules' && stat(subpath)) {
-				paths.add(subpath);
-			}
 		}
 		return Array.from(paths);
 	};
