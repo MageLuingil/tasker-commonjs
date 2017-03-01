@@ -9,7 +9,7 @@
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
  */
-var require;
+var require, module, exports;
 {
 	let module_cache = {};
 	let resolve_cache = {};
@@ -252,4 +252,6 @@ var require;
 		return module.exports;
 	};
 	Object.defineProperty(require, 'main', { value: new Module() });
+	module = require.main;
+	exports = module.exports;
 }
