@@ -128,11 +128,14 @@ var require, module, exports;
 		// For most module identifiers, search within predefined paths
 		let paths = require.paths;
 		if (module_id[0] == '/') {
-			// Absolute identifier, don't search within any paths
+			// Absolute identifier; don't search within any paths
 			paths = [ '' ];
-		} else if (/^\.{1,2}\//.test(module_id) && directory != '.') {
-			// Relative identifier, search within current directory
+		} else if (/^\.{1,2}\//.test(module_id) && directory && directory != '.') {
+			// Relative identifier; only search within current directory
 			paths = [ directory ];
+		} else if (directory && directory != '.') {
+			// Top-level identifier; also search within current directory
+			paths.push(directory);
 		}
 		
 		for (let path of paths) {
@@ -142,7 +145,7 @@ var require, module, exports;
 			if (filetype == 'regular file') {
 				return cache[key] = filepath;
 			} else if (filetype == 'directory') {
-				// Try loading as a node.js module
+				// Try loading as a CommonJS/node.js package
 				try {
 					let pkg = JSON.parse(readFile(joinPath(filepath, 'package.json')));
 					let main = pkg.main && resolveExtension(joinPath(filepath, pkg.main), true);
