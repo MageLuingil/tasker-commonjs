@@ -38,32 +38,65 @@ If you are loading node.js modules, you do not need to include the "node_modules
 
 ### Example ###
 
-Let's say you set up a tasker directory on your SD card that looks something like this:
+Let's build an example project using the excellent [sprintf.js](https://github.com/alexei/sprintf.js) library, and a collection of shared common functions. Set up a directory on your SD card that looks something like this:
 
 ```
 /sdcard/tasker/javascript
- ├─ my-module/
+ ├─ sprintf-js/
  │  └─ (module files)
  ├─ tasker-commonjs/
  │  └─ require.js
  ├─ action.js
- └─ helpers.js
+ └─ functions.js
 ```
 
-Set your `%CommonJS` global variable to "/sdcard/tasker/javascript/tasker-commonjs/require.js"  
-Set your `%JS_PATH` global variable to "/sdcard/tasker/javascript/"  
+Put the following code in your functions.js and action.js files:
 
-Create a task in Tasker with a JavaScript action using the following values:  
-`Path`: /sdcard/tasker/javascript/action.js  
-`Libraries`: %CommonJS  
+```js
+/* functions.js */
+const sprintf = require('sprintf-js').sprintf;
+// You can require() additional modules here
 
-Now you can use `require()` in your code in action.js
+/**
+ * Format the current time in h:mm:ss format
+ */
+function formatTime() {
+    let now = new Date();
+    return sprintf(
+        "%i:%02i:%02i",
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds()
+    );
+}
+exports.formatTime = formatTime;
+
+// You can define additional functions and add them to the exports object here
+```
 
 ```js
 /* action.js */
-const myModule = require('my-module');
-const helpers = require('helpers.js');
+const helpers = require('functions.js'); // You can include individual files as well as module directories
+
+flash('Task started at ' + helpers.formatTime()); // flash() comes from the Tasker JS API
+// do some long task here...
+flash('Task finished at ' + helpers.formatTime());
 ```
+
+Now, let's set up a task to run our new script. In Tasker, do the following (changing the paths to point to your files):
+* Set your `%CommonJS` global variable to "/sdcard/tasker/javascript/tasker-commonjs/require.js"
+* Set your `%JS_PATH` global variable to "/sdcard/tasker/javascript/"
+* Create a task with a JavaScript action using the following values:  
+  `Path`: /sdcard/tasker/javascript/action.js  
+  `Libraries`: %CommonJS  
+
+Run the task. If you see the time flash twice, it worked! You're ready to create your own modules and actions.
+
+If it didn't work, double-check that your globals have the absolute paths to your require.js file and module directory - relative paths do not work.
+
+### Further Resources ###
+
+You can find all the Tasker JS functions available in the [Tasker JavaScript documentation](http://tasker.dinglisch.net/userguide/en/javascript.html).
 
 If you aren't familiar with CommonJS modules, try reading the [node.js docs](https://nodejs.org/api/modules.html) on their implementation.
 
