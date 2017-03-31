@@ -118,7 +118,7 @@ var require, module, exports;
 	 *
 	 * @param {String} module_id  Name or path for a module
 	 * @param {String} directory  Directory from which the module was requested
-	 * @return {String|false}
+	 * @return {String|undefined}
 	 */
 	let resolveFile = function(module_id, directory) {
 		// Cache results to prevent unnecessary filesystem calls
@@ -145,20 +145,14 @@ var require, module, exports;
 			if (filetype == 'regular file') {
 				return cache[key] = filepath;
 			} else if (filetype == 'directory') {
-				// Try loading as a CommonJS/node.js package
-				try {
-					let pkg = JSON.parse(readFile(joinPath(filepath, 'package.json')));
-					let main = pkg.main && resolveExtension(joinPath(filepath, pkg.main), true);
-					if (main) return cache[key] = main;
-				} catch (e) {}
-				// If loading main from package.json failed, try index.js
-				let indexpath = joinPath(filepath, 'index.js');
-				if (stat(indexpath)) return cache[key] = indexpath;
+				let file = resolvePackage(filepath);
+				if (file) return cache[key] = file;
 			}
 			
 			// If it's not a path, check if it's a module in node_modules/
 			if (module_id.indexOf('/') == -1 && basename(path) != 'node_modules') {
-				let file = resolveFile(joinPath(path, 'node_modules', module_id, '/'));
+				let modulepath = joinPath(path, 'node_modules', module_id);
+				let file = stat(modulepath) && resolvePackage(modulepath);
 				if (file) return cache[key] = file;
 			}
 			
@@ -168,8 +162,30 @@ var require, module, exports;
 				if (file) return cache[key] = file;
 			}
 		}
+	};
+	
+	/**
+	 * Resolve a given directory path to the main file for a CommonJS package
+	 *
+	 * @param  {String} filepath  The directory to resolve
+	 * @return {String|undefined}
+	 */
+	let resolvePackage = function(filepath) {
+		// For node.js, the default main is index.js[on]
+		let main = joinPath(filepath, 'index');
 		
-		return false;
+		// If package.main is set, override the default
+		let pkgfile = joinPath(filepath, 'package.json');
+		let pkg = stat(pkgfile) && safeParseJSON(readFile(pkgfile));
+		if (pkg && pkg.main) {
+			main = normalizePath(joinPath(filepath, pkg.main));
+			// Support package.main set to a directory (for node.js modules)
+			if (stat(main) == 'directory') {
+				main = joinPath(main, 'index');
+			}
+		}
+		
+		return resolveExtension(main, true);
 	};
 	
 	/**
@@ -189,6 +205,16 @@ var require, module, exports;
 				echo "regular file"
 			fi
 		`);
+	};
+	
+	/****************
+	 * Misc helpers *
+	 ****************/
+	
+	let safeParseJSON = function(str) {
+		try {
+			return JSON.parse(str);
+		} catch (e) {}
 	};
 	
 	/******************
