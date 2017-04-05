@@ -7,7 +7,7 @@ A CommonJS module loader for [Tasker](http://tasker.dinglisch.net/).
 * Supports individual files or module directories
 * Can include *some* node.js modules (see notes below)
 * Conforms to most of the [CommonJS Modules](http://wiki.commonjs.org/wiki/Modules/1.1) spec (see notes below)
-* Write your Tasker actions in modular [javascript](http://tasker.dinglisch.net/userguide/en/javascript.html)
+* Write your Tasker actions in modular javascript
 
 ```js
 const sprintf = require('sprintf-js').sprintf;
@@ -21,7 +21,7 @@ Usage
 
 To use in your JavaScript actions, you need to:
 
-1. Save [tasker-commonjs](https://github.com/MageLuingil/tasker-commonjs/archive/master.zip) to your device
+1. Save and extract [tasker-commonjs](https://github.com/MageLuingil/tasker-commonjs/archive/master.zip) on your device
 2. Create a global variable `%CommonJS` with the full path to the require.js file
 3. Create a global variable `%JS_PATH` with the full path to the directory of files/modules you want to include
 4. In your JavaScript action, add `%CommonJS` to your Libraries
