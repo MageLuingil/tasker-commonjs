@@ -8,6 +8,7 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
+ * @version 2017/04/05
  */
 var require, module, exports;
 {
@@ -274,7 +275,7 @@ var require, module, exports;
 			} else {
 				// Run in module scope
 				let fn = new Function('require', 'module', 'exports', source);
-				fn.call(module, require, module, module.exports);
+				fn.call(module, require.bind(module), module, module.exports);
 			}
 		}
 		
