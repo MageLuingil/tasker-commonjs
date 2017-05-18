@@ -8,7 +8,7 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
- * @version 2017/04/05
+ * @version 2017/05/18
  */
 var require, module, exports;
 {
@@ -212,6 +212,13 @@ var require, module, exports;
 	 * Misc helpers *
 	 ****************/
 	
+	let cloneEnumerableProperties = function(target, source) {
+		return Object.keys(source).reduce(
+			(_, name) => Object.defineProperty(target, name, Object.getOwnPropertyDescriptor(source, name)),
+			undefined
+		);
+	};
+	
 	let safeParseJSON = function(str) {
 		try {
 			return JSON.parse(str);
@@ -274,14 +281,15 @@ var require, module, exports;
 				module.exports = JSON.parse(source);
 			} else {
 				// Run in module scope
+				let module_require = cloneEnumerableProperties(require.bind(module), require);
 				let fn = new Function('require', 'module', 'exports', source);
-				fn.call(module, require.bind(module), module, module.exports);
+				fn.call(module, module_require, module, module.exports);
 			}
 		}
 		
 		return module.exports;
 	};
-	Object.defineProperty(require, 'main', { value: new Module() });
+	Object.defineProperty(require, 'main', { value: new Module(), enumerable: true });
 	module = require.main;
 	exports = module.exports;
 }
