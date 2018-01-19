@@ -8,7 +8,7 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
- * @version 2017/05/18
+ * @version 2018/01/19
  */
 var require, module, exports;
 {
@@ -123,7 +123,7 @@ var require, module, exports;
 	 */
 	let resolveFile = function(module_id, directory) {
 		// Cache results to prevent unnecessary filesystem calls
-		let cache = resolve_cache, key = JSON.stringify({id: module_id, dir: directory});
+		let cache = resolve_cache, key = JSON.stringify([...arguments]);
 		if (cache[key]) return cache[key];
 		
 		// For most module identifiers, search within predefined paths
@@ -152,7 +152,7 @@ var require, module, exports;
 			
 			// If it's not a path, check if it's a module in node_modules/
 			if (module_id.indexOf('/') == -1 && basename(path) != 'node_modules') {
-				let modulepath = joinPath(path, 'node_modules', module_id);
+				let modulepath = normalizePath(joinPath(path, 'node_modules', module_id));
 				let file = stat(modulepath) && resolvePackage(modulepath);
 				if (file) return cache[key] = file;
 			}
@@ -246,6 +246,34 @@ var require, module, exports;
 	};
 	
 	/**
+	 * Parse a file as a module
+	 */
+	let loadFile = function(filepath) {
+		// Return cached module if available
+		if (module_cache[filepath]) return module_cache[filepath];
+		
+		// Return undefined if file is inaccessible or empty
+		let source = readFile(filepath);
+		if (!source) return;
+		
+		// Prevent cyclic dependencies by caching before parsing
+		let module = new Module(filepath);
+		module_cache[filepath] = module;
+		
+		// Load by file extension (supports json and js)
+		if (extname(filepath) == '.json') {
+			module.exports = JSON.parse(source);
+		} else {
+			// Run in module scope
+			let module_require = cloneEnumerableProperties(require.bind(module), require);
+			let fn = new Function('require', 'module', 'exports', source);
+			fn.call(module, module_require, module, module.exports);
+		}
+		
+		return module;
+	}
+	
+	/**
 	 * Load a module
 	 *
 	 * @param {String} module_id  Name or path for a module
@@ -262,29 +290,13 @@ var require, module, exports;
 		// Canonicalize module name
 		let filepath = resolveFile(module_id, dirname(parent.id));
 		if (!filepath) {
-			throw new Error('Module not found');
+			throw new Error('Module "' + module_id + '" not found');
 		}
 		
 		// Check for cached, or load new
-		let module = module_cache[filepath];
+		let module = loadFile(filepath);
 		if (!module) {
-			module = new Module(filepath);
-			module_cache[filepath] = module;
-			
-			let source = readFile(filepath);
-			if (!source) {
-				throw new Error('Unable to load ' + module_id);
-			}
-			
-			// Load by file extension (supports json and js)
-			if (extname(filepath) == '.json') {
-				module.exports = JSON.parse(source);
-			} else {
-				// Run in module scope
-				let module_require = cloneEnumerableProperties(require.bind(module), require);
-				let fn = new Function('require', 'module', 'exports', source);
-				fn.call(module, module_require, module, module.exports);
-			}
+			throw new Error('Failed to load module "' + module_id + '"');
 		}
 		
 		return module.exports;
