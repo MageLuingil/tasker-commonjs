@@ -1,0 +1,16 @@
+{
+	"extends": "./.eslintrc.json",
+	"rules": {
+		"lines-around-comment": ["warn", {
+			"beforeLineComment": true,
+			"allowBlockStart": true
+		}],
+		"no-multiple-empty-lines": ["warn", { "max": 1 }],
+		"padding-line-between-statements": [
+			"warn",
+			{ "blankLine": "always", "prev": "class", "next": "var" },
+			{ "blankLine": "always", "prev": "multiline-const", "next": "const" },
+			{ "blankLine": "always", "prev": "multiline-block-like", "next": "return" }
+		]
+	}
+}

@@ -1,0 +1,46 @@
+{
+	"root": true,
+	"env": {
+		"commonjs": true,
+		"node": true,
+		"es6": true
+	},
+	"extends": [
+		"eslint:recommended",
+		"plugin:@typescript-eslint/recommended"
+	],
+	"parser": "@typescript-eslint/parser",
+	"parserOptions": {
+		"ecmaVersion": "latest"
+	},
+	"plugins": [
+		"@typescript-eslint"
+	],
+	"rules": {
+		// Indentation
+		"indent": ["error", "tab", { "SwitchCase": 1, "ignoreComments": false }],
+		"no-mixed-spaces-and-tabs": ["error", "smart-tabs"],
+		"no-trailing-spaces": ["warn", {
+			"skipBlankLines": true,
+			"ignoreComments": true
+		}],
+		// Line breaks
+		"brace-style": ["error", "1tbs", { "allowSingleLine": true }],
+		"function-call-argument-newline": ["error", "consistent"],
+		"linebreak-style": ["error", "unix"],
+		"nonblock-statement-body-position": ["error", "beside"],
+		// Line endings
+		"semi": ["error", "always"],
+		"semi-spacing": ["error", { "before": false }],
+		"space-before-function-paren": ["error", "never"],
+		"quotes": ["warn", "single", { "avoidEscape": true, "allowTemplateLiterals": true }],
+		"comma-dangle": ["warn", "only-multiline"],
+		// Syntax
+		"no-var": "off",
+		"no-undef": "off",
+		"prefer-rest-params": "off",
+		// Typescript formatting
+		"@typescript-eslint/no-unused-vars": "off",
+		"@typescript-eslint/no-var-requires": "off"
+	}
+}

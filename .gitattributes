@@ -1,0 +1,5 @@
+# Only archive the bare minimum of files
+**/*        export-ignore
+LICENSE     !export-ignore
+README.md   !export-ignore
+require.js  !export-ignore

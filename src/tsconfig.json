@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"target": "ES6",
+		"outDir": "../build/",
+		"noImplicitAny": true,
+		"skipLibCheck": true,
+		"strictBindCallApply": true,
+		"strictFunctionTypes": true,
+		"strictNullChecks": true,
+	},
+	"ts-node": {
+		"files": true
+	}
+}

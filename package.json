@@ -1,0 +1,26 @@
+{
+	"name": "tasker-commonjs",
+	"version": "1.1.0",
+	"description": "CommonJS and node.js module loader for Tasker ",
+	"license": "MIT",
+	"scripts": {
+		"lint": "eslint src/ --ext .ts",
+		"compile": "tsc -p src/tsconfig.json",
+		"postcompile": "sed -i \"/@version/ s_{{date}}_$(date +%Y/%m/%d)_\" build/require.js",
+		"format": "eslint --config src/.eslintrc.build.json --fix build/",
+		"postformat": "sed -ri '2,$ s_^(\\s*)/\\*_\\1\\n\\1/*_;/^$/ {N;s_^\\n(\\s+)_\\1\\n\\1_};s/^ {4}/\\t/' build/require.js",
+		"build": "yarn run compile && yarn run format"
+	},
+	"devDependencies": {
+		"@types/chai": "^4.3.9",
+		"@types/mocha": "^10.0.3",
+		"@types/node": "^20.8.7",
+		"@typescript-eslint/eslint-plugin": "latest",
+		"@typescript-eslint/parser": "latest",
+		"chai": "^4.3.10",
+		"eslint": "latest",
+		"mocha": "^10.2.0",
+		"ts-node": "^10.9.1",
+		"typescript": "^5.2.2"
+	}
+}
