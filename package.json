@@ -5,11 +5,12 @@
 	"license": "MIT",
 	"scripts": {
 		"lint": "eslint src/ --ext .ts",
-		"compile": "tsc -p src/tsconfig.json",
+		"compile": "tsc -p src/tsconfig.build.json",
 		"postcompile": "sed -i \"/@version/ s_{{date}}_$(date +%Y/%m/%d)_\" build/require.js",
 		"format": "eslint --config src/.eslintrc.build.json --fix build/",
 		"postformat": "sed -ri '2,$ s_^(\\s*)/\\*_\\1\\n\\1/*_;/^$/ {N;s_^\\n(\\s+)_\\1\\n\\1_};s/^ {4}/\\t/' build/require.js",
-		"build": "yarn run compile && yarn run format"
+		"build": "yarn run compile && yarn run format",
+		"test": "TS_NODE_PROJECT='./src/tsconfig.test.json' mocha -r ts-node/register src/*.spec.ts"
 	},
 	"devDependencies": {
 		"@types/chai": "^4.3.9",

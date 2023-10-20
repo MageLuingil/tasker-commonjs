@@ -1,0 +1,1 @@
+module.exports.moduleThatUpdatesModuleExports = true;
