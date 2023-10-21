@@ -8,21 +8,25 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
- * @version 2018/01/19
+ * @version 2023/10/20
  */
-var require, module, exports;
-{
-	let module_cache = {};
-	let resolve_cache = {};
-	
-	/*****************
-	 * Module object *
-	 *****************/
-	
-	let Module = function(id) {
+
+/**
+ * Module object
+ */
+class Module {
+	constructor(id) {
 		Object.defineProperty(this, 'id', { value: id });
 		this.exports = {};
-	};
+	}
+}
+
+var require, module, exports;
+{
+	const moduleCache = new Map();
+	const resolveCache = new Map();
+	
+	const identity = (arg) => arg;
 	
 	/****************
 	 * Misc helpers *
@@ -31,27 +35,20 @@ var require, module, exports;
 	/**
 	 * Initialize JS search paths. Uses array to conform with CommonJS spec.
 	 */
-	let initPaths = function() {
+	const initJsPaths = function() {
 		const PATH = global('JS_PATH') || dirname(global('CommonJS'));
 		
 		// Use a set to remove possible duplicates
-		let paths = new Set();
-		for (let path of PATH.split(':').map(normalizePath)) {
-			// Remove invalid paths now to save time later
-			if (!stat(path)) continue;
-			paths.add(path);
-		}
+		const paths = new Set(PATH.split(':').map(normalizePath).filter(stat));
 		return Array.from(paths);
 	};
 	
-	let cloneEnumerableProperties = function(target, source) {
-		return Object.keys(source).reduce(
-			(_, name) => Object.defineProperty(target, name, Object.getOwnPropertyDescriptor(source, name)),
-			undefined
-		);
+	const cloneEnumerableProperties = function(target, source) {
+		Object.keys(source).map(name => Object.defineProperty(target, name, Object.getOwnPropertyDescriptor(source, name)));
+		return target;
 	};
 	
-	let safeParseJSON = function(str) {
+	const safeParseJson = function(str) {
 		try {
 			return JSON.parse(str);
 		} catch (e) {}
@@ -64,21 +61,18 @@ var require, module, exports;
 	/**
 	 * Return the last segment of a path
 	 */
-	let basename = function(filepath) {
-		let name, segments = filepath.split('/');
-		do {
-			name = segments.pop();
-		} while (!name && segments.length);
-		return name;
+	const basename = function(filepath) {
+		// Find first non-empty path segment starting from the end
+		return filepath.split('/').reverse().find(identity);
 	};
 	
 	/**
 	 * Return the parent directory of a path
 	 */
-	let dirname = function(filepath) {
+	const dirname = function(filepath) {
 		if (!filepath) return '.';
 		// Remove all trailing segments until a non-empty segment is removed
-		let segments = filepath.split('/');
+		const segments = filepath.split('/');
 		while (segments.length && !segments.pop());
 		// If no segments remain, return / for absolute paths and . for relative
 		return segments.join('/') || ((filepath[0] == '/') ? '/' : '.');
@@ -87,30 +81,29 @@ var require, module, exports;
 	/**
 	 * Return the file extension for a path
 	 */
-	let extname = function(filepath) {
-		let matches = basename(filepath).match(/^.+(\.[^.]+)$/);
+	const extname = function(filepath) {
+		const matches = basename(filepath).match(/^.+(\.[^.]+)$/);
 		return matches ? matches[1] : '';
 	};
 	
 	/**
 	 * Join path segments together
 	 */
-	let joinPath = function(...paths) {
+	const joinPath = function(...paths) {
 		// Filter out any empty arguments
-		paths = paths.filter((s) => s.length);
-		return paths.length ? paths.reduce(
+		return paths.filter(identity).reduce((path, seg) => {
 			// Ensure trailing slash on path, remove leading slash on segment
-			(path, seg) => path.replace(/\/?$/, '/') + seg.replace(/^\//, '')
-		) : '';
+			return path.replace(/\/?$/, '/') + seg.replace(/^\//, '');
+		}, '');
 	};
 	
 	/**
 	 * Resolve . and .. segments and remove repeated path separators
 	 */
-	let normalizePath = function(filepath) {
-		let segments = [];
-		for (let cur of filepath.split('/')) {
-			let last = segments[segments.length - 1];
+	const normalizePath = function(filepath) {
+		const segments = [];
+		for (const cur of filepath.split('/')) {
+			const last = segments[segments.length - 1];
 			// For .. remove the last segment (if non-empty) unless it's also ..
 			if (cur == '..' && last && last != '..') {
 				segments.pop();
@@ -137,14 +130,14 @@ var require, module, exports;
 	 * @param {String} filepath  The file path to check
 	 * @return {String}
 	 */
-	let stat = function(filepath) {
+	const stat = function(filepath) {
 		// Quote path for safe shell usage
-		filepath = "'" + filepath.replace(/'/g, "'\\''") + "'";
+		const escapedFilepath = "'" + filepath.replace(/'/g, "'\\''") + "'";
 		// `stat` isn't always available in android, so use a POSIX safe test
 		return shell(`
-			if [ -d ${filepath} ]; then
+			if [ -d ${escapedFilepath} ]; then
 				echo "directory"
-			elif [ -f ${filepath} ]; then
+			elif [ -f ${escapedFilepath} ]; then
 				echo "regular file"
 			fi
 		`);
@@ -153,11 +146,11 @@ var require, module, exports;
 	/**
 	 * Determine which directories to search based on the module ID and current directory
 	 */
-	let resolveSearchPaths = function(module_id, directory) {
-		if (module_id[0] == '/') {
+	const resolveSearchPaths = function(moduleId, directory) {
+		if (moduleId[0] == '/') {
 			// Absolute identifier; don't search within any paths
 			return [''];
-		} else if (/^\.{1,2}\//.test(module_id) && directory && directory != '.') {
+		} else if (/^\.{1,2}\//.test(moduleId) && directory && directory != '.') {
 			// Relative identifier; only search within current directory
 			return [directory];
 		} else if (directory && directory != '.') {
@@ -172,39 +165,39 @@ var require, module, exports;
 	 * Given a module ID, resolve it to the fully qualified path to the file
 	 * that is the entry point to that module.
 	 *
-	 * @param {String} module_id  Name or path for a module
+	 * @param {String} moduleId  Name or path for a module
 	 * @param {String} directory  Directory from which the module was requested
 	 * @return {String|undefined}
 	 */
-	let resolveFile = function(module_id, directory) {
+	const resolveFile = function(moduleId, directory) {
 		// Cache results to prevent unnecessary filesystem calls
-		let cache = resolve_cache, key = JSON.stringify([...arguments]);
-		if (cache[key]) return cache[key];
+		const cache = resolveCache, key = JSON.stringify([...arguments]);
+		if (cache.has(key)) return cache.get(key);
 		
 		// For most module identifiers, search within predefined paths
-		let paths = resolveSearchPaths(module_id, directory);
-		for (let path of paths) {
-			let filepath = normalizePath(joinPath(path, module_id));
-			let filetype = stat(filepath);
+		const paths = resolveSearchPaths(moduleId, directory);
+		for (const path of paths) {
+			const filepath = normalizePath(joinPath(path, moduleId));
+			const filetype = stat(filepath);
 			
 			if (filetype == 'regular file') {
-				return cache[key] = filepath;
+				return cache.set(key, filepath).get(key);
 			} else if (filetype == 'directory') {
-				let file = resolvePackage(filepath);
-				if (file) return cache[key] = file;
+				const file = resolvePackage(filepath);
+				if (file) return cache.set(key, file).get(key);
 			}
 			
 			// If it's not a path, check if it's a module in node_modules/
-			if (module_id.indexOf('/') == -1 && basename(path) != 'node_modules') {
-				let modulepath = normalizePath(joinPath(path, 'node_modules', module_id));
-				let file = stat(modulepath) && resolvePackage(modulepath);
-				if (file) return cache[key] = file;
+			if (moduleId.indexOf('/') == -1 && basename(path) != 'node_modules') {
+				const modulepath = normalizePath(joinPath(path, 'node_modules', moduleId));
+				const file = stat(modulepath) && resolvePackage(modulepath);
+				if (file) return cache.set(key, file).get(key);
 			}
 			
 			// Maybe it's just missing an extension
 			if (filepath.slice(-1) != '/') {
-				let file = resolveExtension(filepath);
-				if (file) return cache[key] = file;
+				const file = resolveExtension(filepath);
+				if (file) return cache.set(key, file).get(key);
 			}
 		}
 	};
@@ -215,35 +208,35 @@ var require, module, exports;
 	 * @param  {String} filepath  The directory to resolve
 	 * @return {String|undefined}
 	 */
-	let resolvePackage = function(filepath) {
-		// For node.js, the default main is index.js[on]
-		let main = joinPath(filepath, 'index');
-		
-		// If package.main is set, override the default
-		let pkgfile = joinPath(filepath, 'package.json');
-		let pkg = stat(pkgfile) && safeParseJSON(readFile(pkgfile));
+	const resolvePackage = function(filepath) {
+		// Check for package definition
+		const pkgfile = joinPath(filepath, 'package.json');
+		const pkg = stat(pkgfile) == 'regular file' ? safeParseJson(readFile(pkgfile)) : undefined;
 		if (pkg && pkg.main) {
-			main = normalizePath(joinPath(filepath, pkg.main));
-			// Support package.main set to a directory (for node.js modules)
-			if (stat(main) == 'directory') {
-				main = joinPath(main, 'index');
+			if (stat(pkg.main) == 'directory') {
+				// Support package.main set to a directory (for node.js modules)
+				return resolveExtension(joinPath(pkg.main, 'index'));
+			} else {
+				const main = normalizePath(joinPath(filepath, pkg.main));
+				return resolveExtension(main, true);
 			}
+		} else {
+			// For node.js, the default main is index.js[on]
+			return resolveExtension(joinPath(filepath, 'index'));
 		}
-		
-		return resolveExtension(main, true);
 	};
 	
 	/**
 	 * Resolve a filepath without a file extension to an existing file
 	 *
 	 * @param {String} filepath The path to the file
-	 * @param {Boolean} check_wo_ext Whether to check for the file without
+	 * @param {Boolean} checkWithNoExt Whether to check for the file without
 	 *  appending an extension
 	 * @return {String|undefined}
 	 */
-	let resolveExtension = function(filepath, check_wo_ext) {
-		if (check_wo_ext && stat(filepath) == 'regular file') return filepath;
-		for (let ext of ['.js', '.json']) {
+	const resolveExtension = function(filepath, checkWithNoExt) {
+		if (checkWithNoExt && stat(filepath) == 'regular file') return filepath;
+		for (const ext of ['.js', '.json']) {
 			if (stat(filepath + ext) == 'regular file') return filepath + ext;
 		}
 	};
@@ -255,55 +248,55 @@ var require, module, exports;
 	/**
 	 * Parse a file as a module
 	 */
-	let loadFile = function(filepath) {
+	const loadFile = function(filepath) {
 		// Return cached module if available
-		if (module_cache[filepath]) return module_cache[filepath];
+		if (moduleCache.has(filepath)) return moduleCache.get(filepath);
 		
 		// Return undefined if file is inaccessible or empty
-		let source = readFile(filepath);
+		const source = readFile(filepath);
 		if (!source) return;
 		
 		// Prevent cyclic dependencies by caching before parsing
-		let module = new Module(filepath);
-		module_cache[filepath] = module;
+		const module = new Module(filepath);
+		moduleCache.set(filepath, module);
 		
 		// Load by file extension (supports json and js)
 		if (extname(filepath) == '.json') {
 			module.exports = JSON.parse(source);
 		} else {
 			// Run in module scope
-			let module_require = cloneEnumerableProperties(require.bind(module), require);
-			let fn = new Function('require', 'module', 'exports', source);
-			fn.call(module, module_require, module, module.exports);
+			const namespacedRequire = cloneEnumerableProperties(require.bind(module), require);
+			const fn = new Function('require', 'module', 'exports', source);
+			fn.call(module, namespacedRequire, module, module.exports);
 		}
 		
 		return module;
-	}
+	};
 	
 	/**
 	 * Load a module
 	 *
-	 * @param {String} module_id  Name or path for a module
+	 * @param {String} moduleId  Name or path for a module
 	 * @return {Object}
 	 */
-	require = function(module_id) {
+	require = function(moduleId) {
 		if (!require.paths) {
-			require.paths = initPaths();
+			require.paths = initJsPaths();
 		}
 		
 		// If require was called from a module, save a reference to it
-		let parent = (this instanceof Module) ? this : require.main;
+		const parent = (this instanceof Module) ? this : require.main;
 		
 		// Canonicalize module name
-		let filepath = resolveFile(module_id, dirname(parent.id));
+		const filepath = resolveFile(moduleId, dirname(parent.id));
 		if (!filepath) {
-			throw new Error('Module "' + module_id + '" not found');
+			throw new Error('Module "' + moduleId + '" not found');
 		}
 		
 		// Check for cached, or load new
-		let module = loadFile(filepath);
+		const module = loadFile(filepath);
 		if (!module) {
-			throw new Error('Failed to load module "' + module_id + '"');
+			throw new Error('Failed to load module "' + moduleId + '"');
 		}
 		
 		return module.exports;
