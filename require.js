@@ -8,8 +8,9 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
- * @version 2023/10/20
+ * @version 2023/10/22
  */
+'use strict';
 
 /**
  * Module object
@@ -17,7 +18,8 @@
 class Module {
 	constructor(id) {
 		Object.defineProperty(this, 'id', { value: id });
-		this.exports = {};
+		Object.defineProperty(this, 'default', { value: {} });
+		this.exports = this.default;
 	}
 }
 
@@ -26,11 +28,8 @@ var require, module, exports;
 	const moduleCache = new Map();
 	const resolveCache = new Map();
 	
+	/** Return the input value */
 	const identity = (arg) => arg;
-	
-	/****************
-	 * Misc helpers *
-	 ****************/
 	
 	/**
 	 * Initialize JS search paths. Uses array to conform with CommonJS spec.
@@ -39,19 +38,19 @@ var require, module, exports;
 		const PATH = global('JS_PATH') || dirname(global('CommonJS'));
 		
 		// Use a set to remove possible duplicates
-		const paths = new Set(PATH.split(':').map(normalizePath).filter(stat));
+		const paths = new Set(PATH.split(':').map(normalizePath).filter(path => stat(path) == FileType.Directory));
 		return Array.from(paths);
 	};
 	
-	const cloneEnumerableProperties = function(target, source) {
+	const cloneEnumerableProperties = function(source, target) {
 		Object.keys(source).map(name => Object.defineProperty(target, name, Object.getOwnPropertyDescriptor(source, name)));
 		return target;
 	};
 	
-	const safeParseJson = function(str) {
+	const safeParseJson = function(json) {
 		try {
-			return JSON.parse(str);
-		} catch (e) {}
+			return JSON.parse(json);
+		} catch (e) { /* noop */ }
 	};
 	
 	/*********************
@@ -71,9 +70,11 @@ var require, module, exports;
 	 */
 	const dirname = function(filepath) {
 		if (!filepath) return '.';
+		
 		// Remove all trailing segments until a non-empty segment is removed
 		const segments = filepath.split('/');
-		while (segments.length && !segments.pop());
+		while (segments.length && !segments.pop()) ;
+		
 		// If no segments remain, return / for absolute paths and . for relative
 		return segments.join('/') || ((filepath[0] == '/') ? '/' : '.');
 	};
@@ -82,7 +83,8 @@ var require, module, exports;
 	 * Return the file extension for a path
 	 */
 	const extname = function(filepath) {
-		const matches = basename(filepath).match(/^.+(\.[^.]+)$/);
+		var _a;
+		const matches = (_a = basename(filepath)) === null || _a === void 0 ? void 0 : _a.match(/^.+(\.[^.]+)$/);
 		return matches ? matches[1] : '';
 	};
 	
@@ -104,10 +106,12 @@ var require, module, exports;
 		const segments = [];
 		for (const cur of filepath.split('/')) {
 			const last = segments[segments.length - 1];
+			
 			// For .. remove the last segment (if non-empty) unless it's also ..
 			if (cur == '..' && last && last != '..') {
 				segments.pop();
 			}
+			
 			// Append empty value only if it's the first segment (for root)
 			// Append .. only if it's the first segment or preceded by ..
 			// Never append .
@@ -115,6 +119,7 @@ var require, module, exports;
 				segments.push(cur);
 			}
 		}
+		
 		// Retain trailing slash
 		if (filepath.slice(-1) == '/') segments.push('');
 		return segments.join('/');
@@ -125,22 +130,32 @@ var require, module, exports;
 	 ***********************/
 	
 	/**
+	 * Enum to represent responses from `stat`
+	 */
+	const FileType = {
+		Directory: 'directory',
+		RegularFile: 'regular file',
+		Unknown: 'unknown'
+	};
+	
+	/**
 	 * Run system call to find the type of a file
 	 *
 	 * @param {String} filepath  The file path to check
-	 * @return {String}
+	 * @returns {FileType}
 	 */
 	const stat = function(filepath) {
 		// Quote path for safe shell usage
-		const escapedFilepath = "'" + filepath.replace(/'/g, "'\\''") + "'";
+		const escapedFilepath = `'${filepath.replace(/'/g, "'\\''")}'`;
+		
 		// `stat` isn't always available in android, so use a POSIX safe test
 		return shell(`
 			if [ -d ${escapedFilepath} ]; then
-				echo "directory"
+				echo "${FileType.Directory}"
 			elif [ -f ${escapedFilepath} ]; then
-				echo "regular file"
+				echo "${FileType.RegularFile}"
 			fi
-		`);
+		`) || FileType.Unknown;
 	};
 	
 	/**
@@ -174,15 +189,14 @@ var require, module, exports;
 		const cache = resolveCache, key = JSON.stringify([...arguments]);
 		if (cache.has(key)) return cache.get(key);
 		
-		// For most module identifiers, search within predefined paths
+		// Some module IDs need to modify the search paths
 		const paths = resolveSearchPaths(moduleId, directory);
 		for (const path of paths) {
 			const filepath = normalizePath(joinPath(path, moduleId));
 			const filetype = stat(filepath);
-			
-			if (filetype == 'regular file') {
+			if (filetype == FileType.RegularFile) {
 				return cache.set(key, filepath).get(key);
-			} else if (filetype == 'directory') {
+			} else if (filetype == FileType.Directory) {
 				const file = resolvePackage(filepath);
 				if (file) return cache.set(key, file).get(key);
 			}
@@ -190,7 +204,7 @@ var require, module, exports;
 			// If it's not a path, check if it's a module in node_modules/
 			if (moduleId.indexOf('/') == -1 && basename(path) != 'node_modules') {
 				const modulepath = normalizePath(joinPath(path, 'node_modules', moduleId));
-				const file = stat(modulepath) && resolvePackage(modulepath);
+				const file = stat(modulepath) == FileType.Directory && resolvePackage(modulepath);
 				if (file) return cache.set(key, file).get(key);
 			}
 			
@@ -211,9 +225,9 @@ var require, module, exports;
 	const resolvePackage = function(filepath) {
 		// Check for package definition
 		const pkgfile = joinPath(filepath, 'package.json');
-		const pkg = stat(pkgfile) == 'regular file' ? safeParseJson(readFile(pkgfile)) : undefined;
-		if (pkg && pkg.main) {
-			if (stat(pkg.main) == 'directory') {
+		const pkg = stat(pkgfile) == FileType.RegularFile ? safeParseJson(readFile(pkgfile)) : undefined;
+		if (pkg === null || pkg === void 0 ? void 0 : pkg.main) {
+			if (stat(pkg.main) == FileType.Directory) {
 				// Support package.main set to a directory (for node.js modules)
 				return resolveExtension(joinPath(pkg.main, 'index'));
 			} else {
@@ -234,16 +248,16 @@ var require, module, exports;
 	 *  appending an extension
 	 * @return {String|undefined}
 	 */
-	const resolveExtension = function(filepath, checkWithNoExt) {
-		if (checkWithNoExt && stat(filepath) == 'regular file') return filepath;
+	const resolveExtension = function(filepath, checkWithNoExt = false) {
+		if (checkWithNoExt && stat(filepath) == FileType.RegularFile) return filepath;
 		for (const ext of ['.js', '.json']) {
-			if (stat(filepath + ext) == 'regular file') return filepath + ext;
+			if (stat(filepath + ext) == FileType.RegularFile) return filepath + ext;
 		}
 	};
 	
-	/******************
-	 * Main functions *
-	 ******************/
+	/****************************
+	 * Module loading functions *
+	 ****************************/
 	
 	/**
 	 * Parse a file as a module
@@ -262,15 +276,39 @@ var require, module, exports;
 		
 		// Load by file extension (supports json and js)
 		if (extname(filepath) == '.json') {
+			// Allow exceptions to bubble up
 			module.exports = JSON.parse(source);
 		} else {
 			// Run in module scope
-			const namespacedRequire = cloneEnumerableProperties(require.bind(module), require);
-			const fn = new Function('require', 'module', 'exports', source);
+			const namespacedRequire = cloneEnumerableProperties(require, require.bind(module));
+			const functionBody = `${source};(${resolveExports.toString()})();`;
+			const fn = new Function('require', 'module', 'exports', functionBody);
 			fn.call(module, namespacedRequire, module, module.exports);
 		}
 		
 		return module;
+	};
+	
+	/**
+	 * Allow setting exported API by assignment to either `module.exports` or `exports`
+	 */
+	const resolveExports = function() {
+		switch (module.default) {
+			case module.exports:
+				if (module.exports !== exports) {
+					// `exports` was modified directly, update `module.exports`
+					module.exports = exports;
+				}
+				break;
+			case exports:
+				// `module.exports` was modified directly, no change needed
+				break;
+			default:
+				// Both `exports` and `module.exports` were reassigned
+				if (module.exports !== exports) {
+					throw new Error('Failed to resolve export - \'exports\' and \'module.exports\' have been assigned different values.');
+				}
+		}
 	};
 	
 	/**
@@ -280,10 +318,6 @@ var require, module, exports;
 	 * @return {Object}
 	 */
 	require = function(moduleId) {
-		if (!require.paths) {
-			require.paths = initJsPaths();
-		}
-		
 		// If require was called from a module, save a reference to it
 		const parent = (this instanceof Module) ? this : require.main;
 		
@@ -301,7 +335,10 @@ var require, module, exports;
 		
 		return module.exports;
 	};
-	Object.defineProperty(require, 'main', { value: new Module(), enumerable: true });
+	
+	// Initialize main module and paths
+	Object.defineProperty(require, 'main', { value: new Module(''), enumerable: true, configurable: false });
+	Object.defineProperty(require, 'paths', { value: initJsPaths(), enumerable: true, configurable: false });
 	module = require.main;
 	exports = module.exports;
 }
