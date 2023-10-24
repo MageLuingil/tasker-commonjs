@@ -1,78 +1,13 @@
 import { assert } from 'chai';
-import { execSync } from 'child_process';
 import { readFileSync } from 'node:fs';
 import * as path from 'path';
+import MockTaskerCommonJsContext from './taskerCommonJsContext.mock';
 
 const ProjectDir = path.normalize(`${__dirname}/..`);
 const ScriptPath = `${ProjectDir}/build/require.js`;
 const ModulePath = `${ProjectDir}/test/modules`;
 
-/**
- * Allows us to run tests from inside a mock Tasker runtime environment, which is basically an Android WebView with
- * some extra functions available in the global scope. This creates a protected scope with mocked tasker functions,
- * injects our custom `require` module loader, then runs a callback inside that scope.
- */
-class MockTaskerRuntimeContext {
-	contextName: string;
-	globalMap: Map<string, string>;
-	requireSourceDefinition: string | undefined;
-	
-	constructor(name: string) {
-		this.contextName = name;
-		this.globalMap = new Map();
-		this.globalMap.set('JS_PATH', ModulePath);
-		this.globalMap.set('CommonJS', ScriptPath);
-	}
-	
-	runInContext(callback: (require: RequireFn, module: Module, exports: unknown) => void) {
-		if (!this.requireSourceDefinition) {
-			this.requireSourceDefinition = readFileSync(ScriptPath, 'utf8');
-		}
-		
-		const callbackDefinition = ';ContextRunnerCallback(require, module, exports);';
-		const functionDefinition = this.requireSourceDefinition + callbackDefinition;
-		const contextRunner = new Function('global', 'readFile', 'shell', 'ContextRunnerCallback', functionDefinition);
-		
-		contextRunner(
-			this.mock_global.bind(this),
-			this.mock_readFile,
-			this.mock_shell,
-			callback,
-		);
-	}
-	
-	testInContext(callback: (require: RequireFn, module: Module, exports: unknown) => void) {
-		describe(this.contextName, () => this.runInContext(callback));
-	}
-	
-	/*
-	 * Mock tasker functions
-	 */
-	
-	mock_global(name: string): string | undefined {
-		return this.globalMap.get(name);
-	}
-	
-	mock_readFile(path: string): string {
-		return readFileSync(path, 'utf8');
-	}
-	
-	mock_shell(command: string, asRoot: boolean, timeoutSecs?: number): string {
-		const timeout = (timeoutSecs || 0) * 1000;
-		return execSync(command, {
-			cwd: ProjectDir,
-			timeout: timeout,
-			maxBuffer: 750 * 1024,
-			encoding: 'utf8',
-		}).trim();
-	}
-}
-
-/********************
- * Test Definitions *
- ********************/
-
-const context = new MockTaskerRuntimeContext('tasker-commonjs');
+const context = new MockTaskerCommonJsContext('tasker-commonjs', ScriptPath, ModulePath);
 context.testInContext((require, module, exports) => {
 	describe('require', () => {
 		// In a module, there is a free variable "require", that is a Function. 
