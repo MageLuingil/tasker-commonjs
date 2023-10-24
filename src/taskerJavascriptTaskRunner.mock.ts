@@ -92,7 +92,7 @@ abstract class TaskerActionRunner {
 }
 
 class MockTaskerActionRunner extends TaskerActionRunner {
-	tkFunctions = {
+	tkFunctions: TaskerApi = {
 		'global': this.global.bind(this),
 		'readFile': this.readFile,
 		'shell': this.shell.bind(this),

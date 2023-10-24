@@ -8,7 +8,7 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
- * @version 2023/10/22
+ * @version 2023/10/24
  */
 'use strict';
 
@@ -25,6 +25,8 @@ class Module {
 
 var require, module, exports;
 {
+	// Access tasker API regardless of whether it's been wrapped in `tk`
+	const tasker = (typeof tk == 'object') ? tk : { global: global, readFile: readFile, shell: shell };
 	const moduleCache = new Map();
 	const resolveCache = new Map();
 	
@@ -35,7 +37,7 @@ var require, module, exports;
 	 * Initialize JS search paths. Uses array to conform with CommonJS spec.
 	 */
 	const initJsPaths = function() {
-		const PATH = global('JS_PATH') || dirname(global('CommonJS'));
+		const PATH = tasker.global('JS_PATH') || dirname(tasker.global('CommonJS') || '');
 		
 		// Use a set to remove possible duplicates
 		const paths = new Set(PATH.split(':').map(normalizePath).filter(path => stat(path) == FileType.Directory));
@@ -149,13 +151,13 @@ var require, module, exports;
 		const escapedFilepath = `'${filepath.replace(/'/g, "'\\''")}'`;
 		
 		// `stat` isn't always available in android, so use a POSIX safe test
-		return shell(`
+		return tasker.shell(`
 			if [ -d ${escapedFilepath} ]; then
 				echo "${FileType.Directory}"
 			elif [ -f ${escapedFilepath} ]; then
 				echo "${FileType.RegularFile}"
 			fi
-		`) || FileType.Unknown;
+		`, false, 30) || FileType.Unknown;
 	};
 	
 	/**
@@ -225,7 +227,7 @@ var require, module, exports;
 	const resolvePackage = function(filepath) {
 		// Check for package definition
 		const pkgfile = joinPath(filepath, 'package.json');
-		const pkg = stat(pkgfile) == FileType.RegularFile ? safeParseJson(readFile(pkgfile)) : undefined;
+		const pkg = stat(pkgfile) == FileType.RegularFile ? safeParseJson(tasker.readFile(pkgfile)) : undefined;
 		if (pkg === null || pkg === void 0 ? void 0 : pkg.main) {
 			if (stat(pkg.main) == FileType.Directory) {
 				// Support package.main set to a directory (for node.js modules)
@@ -267,7 +269,7 @@ var require, module, exports;
 		if (moduleCache.has(filepath)) return moduleCache.get(filepath);
 		
 		// Return undefined if file is inaccessible or empty
-		const source = readFile(filepath);
+		const source = tasker.readFile(filepath);
 		if (!source) return;
 		
 		// Prevent cyclic dependencies by caching before parsing

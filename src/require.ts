@@ -37,6 +37,9 @@ class Module {
 
 var require: RequireFn, module: Module, exports: object;
 {
+	// Access tasker API regardless of whether it's been wrapped in `tk`
+	const tasker: TaskerApi = (typeof tk == 'object') ? tk : { global: global, readFile: readFile, shell: shell };
+	
 	const moduleCache: Map<Filepath, Module> = new Map();
 	const resolveCache: Map<string, Filepath> = new Map();
 	
@@ -47,7 +50,7 @@ var require: RequireFn, module: Module, exports: object;
 	 * Initialize JS search paths. Uses array to conform with CommonJS spec.
 	 */
 	const initJsPaths = function(): Filepath[] {
-		const PATH: string = global('JS_PATH') || dirname(global('CommonJS'));
+		const PATH: string = tasker.global('JS_PATH') || dirname(tasker.global('CommonJS') || '');
 		
 		// Use a set to remove possible duplicates
 		const paths = new Set(PATH.split(':').map(normalizePath).filter(path => stat(path) == FileType.Directory));
@@ -158,13 +161,13 @@ var require: RequireFn, module: Module, exports: object;
 		// Quote path for safe shell usage
 		const escapedFilepath = `'${filepath.replace(/'/g, "'\\''")}'`;
 		// `stat` isn't always available in android, so use a POSIX safe test
-		return shell(`
+		return tasker.shell(`
 			if [ -d ${escapedFilepath} ]; then
 				echo "${FileType.Directory}"
 			elif [ -f ${escapedFilepath} ]; then
 				echo "${FileType.RegularFile}"
 			fi
-		`) || FileType.Unknown;
+		`, false, 30) || FileType.Unknown;
 	};
 	
 	/**
@@ -235,7 +238,7 @@ var require: RequireFn, module: Module, exports: object;
 	const resolvePackage = function(filepath: Filepath): Filepath | undefined {
 		// Check for package definition
 		const pkgfile = joinPath(filepath, 'package.json');
-		const pkg = stat(pkgfile) == FileType.RegularFile ? safeParseJson(readFile(pkgfile)) as Package : undefined;
+		const pkg = stat(pkgfile) == FileType.RegularFile ? safeParseJson(tasker.readFile(pkgfile)) as Package : undefined;
 		if (pkg?.main) {
 			if (stat(pkg.main) == FileType.Directory) {
 				// Support package.main set to a directory (for node.js modules)
@@ -277,7 +280,7 @@ var require: RequireFn, module: Module, exports: object;
 		if (moduleCache.has(filepath)) return moduleCache.get(filepath);
 		
 		// Return undefined if file is inaccessible or empty
-		const source = readFile(filepath);
+		const source = tasker.readFile(filepath);
 		if (!source) return;
 		
 		// Prevent cyclic dependencies by caching before parsing
