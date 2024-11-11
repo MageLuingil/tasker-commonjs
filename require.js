@@ -15,6 +15,8 @@ var require, module, exports;
 	let module_cache = {};
 	let resolve_cache = {};
 	
+	let module_counter = 0;
+	
 	/*****************
 	 * Module object *
 	 *****************/
@@ -219,6 +221,24 @@ var require, module, exports;
 		);
 	};
 	
+	let fixCallStack = function(trace, fn_name, module_path) {
+		let stack = trace.split("\n");
+		for (let i=stack.length-1; i>0; i--) {
+			// For each stack frame, check for this the passed eval function name
+			let matches = stack[i].match(new RegExp(`(\\s+)at ${fn_name} \\(eval at .+:(\\d+):(\\d+)\\)`));
+			if (matches) {
+				// If found, replace eval calls with the module's filename
+				let ws = matches[1], // matches[1] is leading whitespace
+					line = matches[2] - 2, // matches[2] is line number relative to the function
+					char = matches[3], // matches[3] is character number
+					filename = module_path.replace(PATH, '');
+				// Remove 3 calls: eval (current), loadFile and require
+				stack.splice(i, 3, `${ws}at ${filename}:${line}:${char}`);
+			}
+		}
+		return stack.join("\n");
+	};
+	
 	let safeParseJSON = function(str) {
 		try {
 			return JSON.parse(str);
@@ -232,8 +252,9 @@ var require, module, exports;
 	/**
 	 * Initialize search paths
 	 */
+	let PATH;
 	let initPaths = function() {
-		const PATH = global('JS_PATH') || dirname(global('CommonJS'));
+		PATH = global('JS_PATH') || dirname(global('CommonJS'));
 		
 		// Use a set to remove possible duplicates
 		let paths = new Set();
@@ -267,7 +288,18 @@ var require, module, exports;
 			// Run in module scope
 			let module_require = cloneEnumerableProperties(require.bind(module), require);
 			let fn = new Function('require', 'module', 'exports', source);
-			fn.call(module, module_require, module, module.exports);
+			// Assign a unique name to the eval function
+			// let fn_name = 'Module_eval_' + (module_counter++) + '_' + Date.now();
+			// Object.defineProperty(fn, 'name', { value: fn_name, configurable: true, enumerable: false, writable: false });
+			try {
+				fn.call(module, module_require, module, module.exports);
+			} catch (err) {
+				// On error, inject module filenames into the call stack
+				if (err.stack) {
+					err.stack = fixCallStack(err.stack, fn_name, filepath);
+					throw err;
+				}
+			}
 		}
 		
 		return module;
@@ -294,7 +326,8 @@ var require, module, exports;
 		}
 		
 		// Check for cached, or load new
-		let module = loadFile(filepath);
+		
+		// let module = loadFile(filepath);
 		if (!module) {
 			throw new Error('Failed to load module "' + module_id + '"');
 		}
@@ -304,4 +337,6 @@ var require, module, exports;
 	Object.defineProperty(require, 'main', { value: new Module(), enumerable: true });
 	module = require.main;
 	exports = module.exports;
+	
+	Error.stackTraceLimit = 100;
 }
