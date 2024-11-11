@@ -1,7 +1,7 @@
 import { assert } from 'chai';
 import { readFileSync } from 'node:fs';
 import * as path from 'path';
-import MockTaskerCommonJsContext from './taskerCommonJsContext.mock';
+import MockTaskerCommonJsContext from './mocks/taskerCommonJsContext.mock';
 
 const ProjectDir = path.normalize(`${__dirname}/..`);
 const ScriptPath = `${ProjectDir}/build/require.js`;

@@ -8,7 +8,7 @@
  *
  * @author Daniel Matthies <mageluingil@gmail.com>
  * @see http://wiki.commonjs.org/wiki/Modules/1.1
- * @version 2023/10/24
+ * @version 2023/10/25
  */
 'use strict';
 
